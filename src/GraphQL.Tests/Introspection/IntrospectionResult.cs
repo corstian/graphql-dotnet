@@ -133,6 +133,96 @@ namespace GraphQL.Tests.Introspection
           ""possibleTypes"": null
         },
         {
+          ""kind"": ""SCALAR"",
+          ""name"": ""Guid"",
+          ""description"": null,
+          ""fields"": null,
+          ""inputFields"": null,
+          ""interfaces"": null,
+          ""enumValues"": null,
+          ""possibleTypes"": null
+        },
+        {
+          ""kind"": ""SCALAR"",
+          ""name"": ""Short"",
+          ""description"": null,
+          ""fields"": null,
+          ""inputFields"": null,
+          ""interfaces"": null,
+          ""enumValues"": null,
+          ""possibleTypes"": null
+        },
+        {
+          ""kind"": ""SCALAR"",
+          ""name"": ""UShort"",
+          ""description"": null,
+          ""fields"": null,
+          ""inputFields"": null,
+          ""interfaces"": null,
+          ""enumValues"": null,
+          ""possibleTypes"": null
+        },
+        {
+          ""kind"": ""SCALAR"",
+          ""name"": ""UInt"",
+          ""description"": null,
+          ""fields"": null,
+          ""inputFields"": null,
+          ""interfaces"": null,
+          ""enumValues"": null,
+          ""possibleTypes"": null
+        },
+        {
+          ""kind"": ""SCALAR"",
+          ""name"": ""Long"",
+          ""description"": null,
+          ""fields"": null,
+          ""inputFields"": null,
+          ""interfaces"": null,
+          ""enumValues"": null,
+          ""possibleTypes"": null
+        },
+        {
+          ""kind"": ""SCALAR"",
+          ""name"": ""BigInt"",
+          ""description"": null,
+          ""fields"": null,
+          ""inputFields"": null,
+          ""interfaces"": null,
+          ""enumValues"": null,
+          ""possibleTypes"": null
+        },
+        {
+          ""kind"": ""SCALAR"",
+          ""name"": ""ULong"",
+          ""description"": null,
+          ""fields"": null,
+          ""inputFields"": null,
+          ""interfaces"": null,
+          ""enumValues"": null,
+          ""possibleTypes"": null
+        },
+        {
+          ""kind"": ""SCALAR"",
+          ""name"": ""Byte"",
+          ""description"": null,
+          ""fields"": null,
+          ""inputFields"": null,
+          ""interfaces"": null,
+          ""enumValues"": null,
+          ""possibleTypes"": null
+        },
+        {
+          ""kind"": ""SCALAR"",
+          ""name"": ""SByte"",
+          ""description"": null,
+          ""fields"": null,
+          ""inputFields"": null,
+          ""interfaces"": null,
+          ""enumValues"": null,
+          ""possibleTypes"": null
+        },
+        {
           ""kind"": ""OBJECT"",
           ""name"": ""__Schema"",
           ""description"": ""A GraphQL Schema defines the capabilities of a GraphQL server. It exposes all available types and directives on the server, as well as the entry points for query, mutation, and subscription operations."",
@@ -450,7 +540,7 @@ namespace GraphQL.Tests.Introspection
             },
             {
               ""name"": ""ENUM"",
-              ""description"": ""Indicates this type is an num.  `enumValues` is a valid field."",
+              ""description"": ""Indicates this type is an enum.  `enumValues` is a valid field."",
               ""isDeprecated"": false,
               ""deprecationReason"": null
             },
@@ -687,7 +777,7 @@ namespace GraphQL.Tests.Introspection
                 ""name"": null,
                 ""ofType"": {
                   ""kind"": ""SCALAR"",
-                  ""name"": ""String"",
+                  ""name"": ""Boolean"",
                   ""ofType"": null
                 }
               },

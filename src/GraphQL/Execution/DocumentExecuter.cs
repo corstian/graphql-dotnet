@@ -14,11 +14,6 @@ using ExecutionContext = GraphQL.Execution.ExecutionContext;
 
 namespace GraphQL
 {
-    public interface IDocumentExecuter
-    {
-        Task<ExecutionResult> ExecuteAsync(ExecutionOptions options);
-        Task<ExecutionResult> ExecuteAsync(Action<ExecutionOptions> configure);
-    }
 
     public class DocumentExecuter : IDocumentExecuter
     {
@@ -65,13 +60,16 @@ namespace GraphQL
         {
             if (options == null)
                 throw new ArgumentNullException(nameof(options));
+            if (options.Schema == null)
+                throw new InvalidOperationException("Cannot execute request if no schema is specified");
 
-            var metrics = new Metrics(options.EnableMetrics);
-            metrics.Start(options.OperationName);
+            var metrics = new Metrics(options.EnableMetrics).Start(options.OperationName);
 
             options.Schema.FieldNameConverter = options.FieldNameConverter;
+            options.Schema.Filter = options.SchemaFilter;
 
             ExecutionResult result = null;
+            ExecutionContext context = null;
 
             try
             {
@@ -81,10 +79,7 @@ namespace GraphQL
                 {
                     using (metrics.Subject("schema", "Initializing schema"))
                     {
-                        if (options.SetFieldMiddleware)
-                        {
-                            options.FieldMiddleware.ApplyTo(options.Schema);
-                        }
+                        options.FieldMiddleware.ApplyTo(options.Schema);
                         options.Schema.Initialize();
                     }
                 }
@@ -109,7 +104,7 @@ namespace GraphQL
                 IValidationResult validationResult;
                 using (metrics.Subject("document", "Validating document"))
                 {
-                    validationResult = _documentValidator.Validate(
+                    validationResult = await _documentValidator.ValidateAsync(
                         options.Query,
                         options.Schema,
                         document,
@@ -139,11 +134,11 @@ namespace GraphQL
                     {
                         Errors = validationResult.Errors,
                         ExposeExceptions = options.ExposeExceptions,
-                        Perf = metrics.Finish()?.ToArray()
+                        Perf = metrics.Finish()
                     };
                 }
 
-                var context = BuildExecutionContext(
+                context = BuildExecutionContext(
                     options.Schema,
                     options.Root,
                     document,
@@ -153,7 +148,9 @@ namespace GraphQL
                     options.CancellationToken,
                     metrics,
                     options.Listeners,
-                    options.ThrowOnUnhandledException);
+                    options.ThrowOnUnhandledException,
+                    options.UnhandledExceptionDelegate,
+                    options.MaxParallelExecutionCount);
 
                 if (context.Errors.Any())
                 {
@@ -161,7 +158,7 @@ namespace GraphQL
                     {
                         Errors = context.Errors,
                         ExposeExceptions = options.ExposeExceptions,
-                        Perf = metrics.Finish()?.ToArray()
+                        Perf = metrics.Finish()
                     };
                 }
 
@@ -206,6 +203,13 @@ namespace GraphQL
                 if (options.ThrowOnUnhandledException)
                     throw;
 
+                if (options.UnhandledExceptionDelegate != null)
+                {
+                    var exceptionContext = new UnhandledExceptionContext(context, null, ex);
+                    options.UnhandledExceptionDelegate(exceptionContext);
+                    ex = exceptionContext.Exception;
+                }
+
                 result = new ExecutionResult
                 {
                     Errors = new ExecutionErrors
@@ -216,9 +220,9 @@ namespace GraphQL
             }
             finally
             {
-                result = result ?? new ExecutionResult();
+                result ??= new ExecutionResult();
                 result.ExposeExceptions = options.ExposeExceptions;
-                result.Perf = metrics.Finish()?.ToArray();
+                result.Perf = metrics.Finish();
             }
 
             return result;
@@ -230,26 +234,32 @@ namespace GraphQL
             Document document,
             Operation operation,
             Inputs inputs,
-            object userContext,
+            IDictionary<string, object> userContext,
             CancellationToken cancellationToken,
             Metrics metrics,
             IEnumerable<IDocumentExecutionListener> listeners,
-            bool throwOnUnhandledException)
+            bool throwOnUnhandledException,
+            Action<UnhandledExceptionContext> unhandledExceptionDelegate,
+            int? maxParallelExecutionCount)
         {
-            var context = new ExecutionContext();
-            context.Document = document;
-            context.Schema = schema;
-            context.RootValue = root;
-            context.UserContext = userContext;
+            var context = new ExecutionContext
+            {
+                Document = document,
+                Schema = schema,
+                RootValue = root,
+                UserContext = userContext,
 
-            context.Operation = operation;
-            context.Variables = GetVariableValues(document, schema, operation?.Variables, inputs);
-            context.Fragments = document.Fragments;
-            context.CancellationToken = cancellationToken;
+                Operation = operation,
+                Variables = GetVariableValues(document, schema, operation?.Variables, inputs),
+                Fragments = document.Fragments,
+                CancellationToken = cancellationToken,
 
-            context.Metrics = metrics;
-            context.Listeners = listeners;
-            context.ThrowOnUnhandledException = throwOnUnhandledException;
+                Metrics = metrics,
+                Listeners = listeners,
+                ThrowOnUnhandledException = throwOnUnhandledException,
+                UnhandledExceptionDelegate = unhandledExceptionDelegate,
+                MaxParallelExecutionCount = maxParallelExecutionCount
+            };
 
             return context;
         }
@@ -264,20 +274,13 @@ namespace GraphQL
         protected virtual IExecutionStrategy SelectExecutionStrategy(ExecutionContext context)
         {
             // TODO: Should we use cached instances of the default execution strategies?
-            switch (context.Operation.OperationType)
+            return context.Operation.OperationType switch
             {
-                case OperationType.Query:
-                    return new ParallelExecutionStrategy();
-
-                case OperationType.Mutation:
-                    return new SerialExecutionStrategy();
-
-                case OperationType.Subscription:
-                    return new SubscriptionExecutionStrategy();
-
-                default:
-                    throw new InvalidOperationException($"Unexpected OperationType {context.Operation.OperationType}");
-            }
+                OperationType.Query => new ParallelExecutionStrategy(),
+                OperationType.Mutation => new SerialExecutionStrategy(),
+                OperationType.Subscription => new SubscriptionExecutionStrategy(),
+                _ => throw new InvalidOperationException($"Unexpected OperationType {context.Operation.OperationType}")
+            };
         }
     }
 }

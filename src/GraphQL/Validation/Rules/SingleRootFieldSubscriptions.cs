@@ -2,15 +2,18 @@ namespace GraphQL.Validation.Rules
 {
     using GraphQL.Language.AST;
     using System.Linq;
+    using System.Threading.Tasks;
 
     /// <summary>
     /// Subscription operations must have exactly one root field.
     /// </summary>
     public class SingleRootFieldSubscriptions : IValidationRule
     {
-        private static readonly string RuleCode = "5.2.3.1";
+        private const string RuleCode = "5.2.3.1";
 
-        public INodeVisitor Validate(ValidationContext context)
+        public static readonly SingleRootFieldSubscriptions Instance = new SingleRootFieldSubscriptions();
+
+        public Task<INodeVisitor> ValidateAsync(ValidationContext context)
         {
             return new EnterLeaveListener(config =>
             {
@@ -21,7 +24,7 @@ namespace GraphQL.Validation.Rules
                         return;
                     }
 
-                    int rootFields = operation.SelectionSet.Selections.Count();
+                    int rootFields = operation.SelectionSet.Selections.Count;
 
                     if (rootFields != 1)
                     {
@@ -35,17 +38,17 @@ namespace GraphQL.Validation.Rules
 
                     var fragment = operation.SelectionSet.Selections.FirstOrDefault(IsFragment);
 
-                    if(fragment == null )
+                    if (fragment == null)
                     {
                         return;
                     }
 
-                    if(fragment is FragmentSpread fragmentSpread)
+                    if (fragment is FragmentSpread fragmentSpread)
                     {
                         var fragmentDefinition = context.GetFragment(fragmentSpread.Name);
                         rootFields = fragmentDefinition.SelectionSet.Selections.Count;
                     }
-                    else if(fragment is InlineFragment fragmentSelectionSet)
+                    else if (fragment is InlineFragment fragmentSelectionSet)
                     {
                         rootFields = fragmentSelectionSet.SelectionSet.Selections.Count;
                     }
@@ -61,7 +64,7 @@ namespace GraphQL.Validation.Rules
                     }
 
                 });
-            });
+            }).ToTask();
         }
 
         public static string InvalidNumberOfRootFieldMessage(string name)

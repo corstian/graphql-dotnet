@@ -1,4 +1,6 @@
 using System;
+using System.Diagnostics;
+using GraphQL.Utilities;
 
 namespace GraphQL.Types
 {
@@ -11,7 +13,8 @@ namespace GraphQL.Types
         }
     }
 
-    public class QueryArgument : IHaveDefaultValue
+    [DebuggerDisplay("{Name,nq}: {ResolvedType,nq}")]
+    public class QueryArgument : MetadataProvider, IHaveDefaultValue
     {
         public QueryArgument(IGraphType type)
         {

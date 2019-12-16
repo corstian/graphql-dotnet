@@ -1,10 +1,5 @@
-﻿using GraphQL.Builders;
 using GraphQL.StarWars.Types;
 using GraphQL.Types;
-using GraphQL.Types.Relay.DataObjects;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace GraphQL.StarWars
 {
@@ -28,7 +23,7 @@ namespace GraphQL.StarWars
             Field<HumanType>(
                 "createHuman",
                 arguments: new QueryArguments(
-                    new QueryArgument<NonNullGraphType<HumanInputType>> {Name = "human"}
+                    new QueryArgument<NonNullGraphType<HumanInputType>> { Name = "human" }
                 ),
                 resolve: context =>
                 {

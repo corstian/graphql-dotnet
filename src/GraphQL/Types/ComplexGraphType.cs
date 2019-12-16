@@ -1,12 +1,13 @@
 using GraphQL.Builders;
 using GraphQL.Resolvers;
+using GraphQL.Subscription;
+using GraphQL.Types.Relay;
+using GraphQL.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
-using GraphQL.Subscription;
-using GraphQL.Utilities;
 
 namespace GraphQL.Types
 {
@@ -24,6 +25,12 @@ namespace GraphQL.Types
     public abstract class ComplexGraphType<TSourceType> : GraphType, IComplexGraphType
     {
         private readonly List<FieldType> _fields = new List<FieldType>();
+
+        protected ComplexGraphType()
+        {
+            Description ??= typeof(TSourceType).Description();
+            DeprecationReason ??= typeof(TSourceType).ObsoleteMessage();
+        }
 
         public IEnumerable<FieldType> Fields
         {
@@ -51,25 +58,44 @@ namespace GraphQL.Types
 
         public virtual FieldType AddField(FieldType fieldType)
         {
+            if (fieldType == null)
+                throw new ArgumentNullException(nameof(fieldType));
+
+            if (!(fieldType.ResolvedType.GetNamedType() is GraphQLTypeReference))
+            {
+                if (this is IInputObjectGraphType)
+                {
+                    if (fieldType.ResolvedType?.IsInputType() == false || fieldType.Type?.IsInputType() == false)
+                        throw new ArgumentOutOfRangeException(nameof(fieldType),
+                            $"Input type '{Name ?? GetType().GetFriendlyName()}' can have fields only of input types: ScalarGraphType, EnumerationGraphType or IInputObjectGraphType.");
+                }
+                else
+                {
+                    if (fieldType.ResolvedType?.IsOutputType() == false || fieldType.Type?.IsOutputType() == false)
+                        throw new ArgumentOutOfRangeException(nameof(fieldType),
+                            $"Output type '{Name ?? GetType().GetFriendlyName()}' can have fields only of output types: ScalarGraphType, ObjectGraphType, InterfaceGraphType, UnionGraphType or EnumerationGraphType.");
+                }
+            }
+
             NameValidator.ValidateName(fieldType.Name);
 
             if (HasField(fieldType.Name))
             {
-                throw new ArgumentOutOfRangeException(nameof(fieldType.Name),
-                    $"A field with the name: {fieldType.Name} is already registered for GraphType: {Name ?? this.GetType().Name}");
+                throw new ArgumentOutOfRangeException(nameof(fieldType),
+                    $"A field with the name '{fieldType.Name}' is already registered for GraphType '{Name ?? GetType().Name}'");
             }
 
             if (fieldType.ResolvedType == null)
             {
                 if (fieldType.Type == null)
                 {
-                    throw new ArgumentOutOfRangeException(nameof(fieldType.Type),
+                    throw new ArgumentOutOfRangeException(nameof(fieldType),
                         $"The declared field '{fieldType.Name ?? fieldType.GetType().GetFriendlyName()}' on '{Name ?? GetType().GetFriendlyName()}' requires a field '{nameof(fieldType.Type)}' when no '{nameof(fieldType.ResolvedType)}' is provided.");
                 }
                 else if (!fieldType.Type.IsGraphType())
                 {
-                    throw new ArgumentOutOfRangeException(nameof(fieldType.Type),
-                        $"The declared Field type: {fieldType.Type.Name} should derive from GraphType.");
+                    throw new ArgumentOutOfRangeException(nameof(fieldType),
+                        $"The declared Field type '{fieldType.Type.Name}' should derive from GraphType.");
                 }
             }
 
@@ -254,7 +280,7 @@ namespace GraphQL.Types
             });
         }
 
-        public FieldBuilder<TSourceType, TReturnType> Field<TGraphType, TReturnType>(string name = "default")
+        public virtual FieldBuilder<TSourceType, TReturnType> Field<TGraphType, TReturnType>(string name = "default")
         {
             var builder = FieldBuilder.Create<TSourceType, TReturnType>(typeof(TGraphType))
                 .Name(name);
@@ -262,10 +288,10 @@ namespace GraphQL.Types
             return builder;
         }
 
-        public FieldBuilder<TSourceType, object> Field<TGraphType>()
+        public virtual FieldBuilder<TSourceType, object> Field<TGraphType>()
             => Field<TGraphType, object>();
 
-        public FieldBuilder<TSourceType, TProperty> Field<TProperty>(
+        public virtual FieldBuilder<TSourceType, TProperty> Field<TProperty>(
            string name,
            Expression<Func<TSourceType, TProperty>> expression,
            bool nullable = false,
@@ -285,14 +311,17 @@ namespace GraphQL.Types
             }
 
             var builder = FieldBuilder.Create<TSourceType, TProperty>(type)
+                .Name(name)
                 .Resolve(new ExpressionFieldResolver<TSourceType, TProperty>(expression))
-                .Name(name);
+                .Description(expression.DescriptionOf())
+                .DeprecationReason(expression.DeprecationReasonOf())
+                .DefaultValue(expression.DefaultValueOf());
 
             AddField(builder.FieldType);
             return builder;
         }
 
-        public FieldBuilder<TSourceType, TProperty> Field<TProperty>(
+        public virtual FieldBuilder<TSourceType, TProperty> Field<TProperty>(
             Expression<Func<TSourceType, TProperty>> expression,
             bool nullable = false,
             Type type = null)
@@ -309,10 +338,29 @@ namespace GraphQL.Types
             return Field(name, expression, nullable, type);
         }
 
-        public ConnectionBuilder<TNodeType, TSourceType> Connection<TNodeType>()
+        public ConnectionBuilder<TSourceType> Connection<TNodeType>()
             where TNodeType : IGraphType
         {
             var builder = ConnectionBuilder.Create<TNodeType, TSourceType>();
+            AddField(builder.FieldType);
+            return builder;
+        }
+
+        public ConnectionBuilder<TSourceType> Connection<TNodeType, TEdgeType>()
+            where TNodeType : IGraphType
+            where TEdgeType : EdgeType<TNodeType>
+        {
+            var builder = ConnectionBuilder.Create<TNodeType, TEdgeType, TSourceType>();
+            AddField(builder.FieldType);
+            return builder;
+        }
+
+        public ConnectionBuilder<TSourceType> Connection<TNodeType, TEdgeType, TConnectionType>()
+            where TNodeType : IGraphType
+            where TEdgeType : EdgeType<TNodeType>
+            where TConnectionType : ConnectionType<TNodeType, TEdgeType>
+        {
+            var builder = ConnectionBuilder.Create<TNodeType, TEdgeType, TConnectionType, TSourceType>();
             AddField(builder.FieldType);
             return builder;
         }

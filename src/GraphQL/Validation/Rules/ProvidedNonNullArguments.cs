@@ -1,5 +1,6 @@
 using GraphQL.Language.AST;
 using GraphQL.Types;
+using System.Threading.Tasks;
 
 namespace GraphQL.Validation.Rules
 {
@@ -21,7 +22,9 @@ namespace GraphQL.Validation.Rules
             return $"Directive \"{directiveName}\" argument \"{argName}\" of type \"{type}\" is required but not provided.";
         }
 
-        public INodeVisitor Validate(ValidationContext context)
+        public static readonly ProvidedNonNullArguments Instance = new ProvidedNonNullArguments();
+
+        public Task<INodeVisitor> ValidateAsync(ValidationContext context)
         {
             return new EnterLeaveListener(_ =>
             {
@@ -76,7 +79,7 @@ namespace GraphQL.Validation.Rules
                         }
                     }
                 });
-            });
+            }).ToTask();
         }
     }
 }

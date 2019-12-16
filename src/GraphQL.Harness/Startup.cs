@@ -3,7 +3,6 @@ using GraphQL.Http;
 using GraphQL.StarWars;
 using GraphQL.StarWars.Types;
 using GraphQL.Types;
-using GraphQL.Types.Relay;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -25,8 +24,6 @@ namespace GraphQL.Harness
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
-            services.AddSingleton<IDependencyResolver>(s => new FuncDependencyResolver(s.GetRequiredService));
-
             services.AddSingleton<IDocumentExecuter, DocumentExecuter>();
             services.AddSingleton<IDocumentWriter, DocumentWriter>();
 
@@ -38,18 +35,16 @@ namespace GraphQL.Harness
             services.AddSingleton<DroidType>();
             services.AddSingleton<CharacterInterface>();
             services.AddSingleton<EpisodeEnum>();
-            services.AddTransient(typeof(ConnectionType<>));
-            services.AddTransient(typeof(EdgeType<>));
-            services.AddTransient<PageInfoType>();
             services.AddSingleton<ISchema, StarWarsSchema>();
 
             services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
+
+            services.AddLogging(builder => builder.AddConsole());
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IHostingEnvironment env, ILoggingBuilder loggerFactory)
+        public void Configure(IApplicationBuilder app, IHostingEnvironment env)
         {
-            loggerFactory.AddConsole();
             app.UseDeveloperExceptionPage();
 
             app.UseMiddleware<GraphQLMiddleware>(new GraphQLSettings
@@ -58,7 +53,8 @@ namespace GraphQL.Harness
                 {
                     User = ctx.User
                 },
-                EnableMetrics = Configuration.GetValue<bool>("EnableMetrics")
+                EnableMetrics = Configuration.GetValue<bool>("EnableMetrics"),
+                ExposeExceptions = Configuration.GetValue<bool>("ExposeExceptions")
             });
 
             app.UseDefaultFiles();

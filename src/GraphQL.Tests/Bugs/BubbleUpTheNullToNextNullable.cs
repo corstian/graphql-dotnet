@@ -2,6 +2,7 @@ namespace GraphQL.Tests.Bugs
 {
     using GraphQL.Types;
     using Shouldly;
+    using System;
     using System.Collections.Generic;
     using Xunit;
 
@@ -12,8 +13,8 @@ namespace GraphQL.Tests.Bugs
         {
             const string QUERY = "{ nullableDataGraph { nullable } }";
             const string EXPECTED = "{ nullableDataGraph: { nullable: null } }";
-            var data = new Data {Nullable = null};
-            var errors = new ExecutionError[] { };
+            var data = new Data { Nullable = null };
+            var errors = Array.Empty<ExecutionError>();
 
             AssertResult(QUERY, EXPECTED, data, errors);
         }
@@ -24,7 +25,7 @@ namespace GraphQL.Tests.Bugs
             const string QUERY = "{ nullableDataGraph { nonNullable } }";
             const string EXPECTED = "{ nullableDataGraph: { nonNullable: 'data' } }";
             var data = new Data { NonNullable = "data" };
-            var errors = new ExecutionError[] { };
+            var errors = Array.Empty<ExecutionError>();
 
             AssertResult(QUERY, EXPECTED, data, errors);
         }
@@ -184,6 +185,24 @@ namespace GraphQL.Tests.Bugs
             AssertResult(QUERY, EXPECTED, data, errors);
         }
 
+        [Fact]
+        public void NoNullListOfNonNull_with_exception_should_bubble_up_the_null()
+        {
+            const string QUERY = "{ nonNullableListOfNonNullableDataGraph { nonNullableListOfNonNullableThrow } }";
+            const string EXPECTED = "";
+            var data = new Data { ListOfStrings = new List<string> { "text", null, null } };
+            var errors = new[]
+            {
+                new ExecutionError(
+                    "Error trying to resolve nonNullableListOfNonNullableThrow.")
+                {
+                    Path = new[] { "nonNullableListOfNonNullableDataGraph", "0", "nonNullableListOfNonNullableThrow"}
+                }
+            };
+
+            AssertResult(QUERY, EXPECTED, data, errors);
+        }
+
         private void AssertResult(string query, string expected, Data data, IReadOnlyList<ExecutionError> errors)
         {
             ExecutionResult result =
@@ -224,13 +243,17 @@ namespace GraphQL.Tests.Bugs
 
             query.Field<NonNullGraphType<DataGraphType>>(
                 "nonNullableDataGraph",
-                resolve: c => new DataGraphType() { Data = c.Source as Data }
+                resolve: c => new DataGraphType { Data = c.Source as Data }
             );
 
             query.Field<DataGraphType>(
                 "nullableDataGraph",
-                resolve: c => new DataGraphType() { Data = c.Source as Data }
+                resolve: c => new DataGraphType { Data = c.Source as Data }
             );
+
+            query.Field<NonNullGraphType<ListGraphType<NonNullGraphType<DataGraphType>>>>(
+               "nonNullableListOfNonNullableDataGraph",
+               resolve: c => new[] { new DataGraphType() });
 
             Query = query;
         }
@@ -262,13 +285,17 @@ namespace GraphQL.Tests.Bugs
                 "nonNullableListOfNonNullable",
                 resolve: c => c.Source.Data.ListOfStrings);
 
+            Field<NonNullGraphType<ListGraphType<NonNullGraphType<StringGraphType>>>>(
+                "nonNullableListOfNonNullableThrow",
+                resolve: c => throw new Exception("test"));
+
             Field<NonNullGraphType<DataGraphType>>(
                 "nonNullableNest",
-                resolve: c => new DataGraphType() { Data = c.Source.Data.NonNullableNest });
+                resolve: c => new DataGraphType { Data = c.Source.Data.NonNullableNest });
 
             Field<DataGraphType>(
                  "nullableNest",
-                resolve: c => new DataGraphType() { Data = c.Source.Data.NullableNest });
+                resolve: c => new DataGraphType { Data = c.Source.Data.NullableNest });
         }
 
         public Data Data { get; set; }

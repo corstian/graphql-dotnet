@@ -116,6 +116,10 @@ namespace GraphQL.Execution
                     {
                         SetSubFieldNodes(context, objectNode);
                     }
+                    else if (node is ArrayExecutionNode arrayNode)
+                    {
+                        SetArrayItemNodes(context, arrayNode);
+                    }
 
                     arrayItems.Add(node);
                 }
@@ -146,28 +150,19 @@ namespace GraphQL.Execution
 
         public static ExecutionNode BuildExecutionNode(ExecutionNode parent, IGraphType graphType, Field field, FieldType fieldDefinition, string[] path = null)
         {
-            path = path ?? AppendPath(parent.Path, field.Name);
+            path ??= AppendPath(parent.Path, field.Name);
 
             if (graphType is NonNullGraphType nonNullFieldType)
                 graphType = nonNullFieldType.ResolvedType;
 
-            switch (graphType)
+            return graphType switch
             {
-                case ListGraphType listGraphType:
-                    return new ArrayExecutionNode(parent, graphType, field, fieldDefinition, path);
-
-                case IObjectGraphType objectGraphType:
-                    return new ObjectExecutionNode(parent, graphType, field, fieldDefinition, path);
-
-                case IAbstractGraphType abstractType:
-                    return new ObjectExecutionNode(parent, graphType, field, fieldDefinition, path);
-
-                case ScalarGraphType scalarType:
-                    return new ValueExecutionNode(parent, graphType, field, fieldDefinition, path);
-
-                default:
-                    throw new InvalidOperationException($"Unexpected type: {graphType}");
-            }
+                ListGraphType _ => new ArrayExecutionNode(parent, graphType, field, fieldDefinition, path),
+                IObjectGraphType _ => new ObjectExecutionNode(parent, graphType, field, fieldDefinition, path),
+                IAbstractGraphType _ => new ObjectExecutionNode(parent, graphType, field, fieldDefinition, path),
+                ScalarGraphType _ => new ValueExecutionNode(parent, graphType, field, fieldDefinition, path),
+                _ => throw new InvalidOperationException($"Unexpected type: {graphType}")
+            };
         }
 
         /// <summary>
@@ -183,12 +178,14 @@ namespace GraphQL.Execution
             if (node.IsResultSet)
                 return node;
 
+            ResolveFieldContext resolveContext = null;
+
             try
             {
                 var arguments = GetArgumentValues(context.Schema, node.FieldDefinition.Arguments, node.Field.Arguments, context.Variables);
                 var subFields = SubFieldsFor(context, node.FieldDefinition.ResolvedType, node.Field);
 
-                var resolveContext = new ResolveFieldContext
+                resolveContext = new ResolveFieldContext
                 {
                     FieldName = node.Field.Name,
                     FieldAst = node.Field,
@@ -211,7 +208,7 @@ namespace GraphQL.Execution
                     SubFields = subFields
                 };
 
-                var resolver = node.FieldDefinition.Resolver ?? new NameFieldResolver();
+                var resolver = node.FieldDefinition.Resolver ?? NameFieldResolver.Instance;
                 var result = resolver.Resolve(resolveContext);
 
                 if (result is Task task)
@@ -250,7 +247,15 @@ namespace GraphQL.Execution
                 if (context.ThrowOnUnhandledException)
                     throw;
 
-                var error = new ExecutionError($"Error trying to resolve {node.Name}.", ex);
+                UnhandledExceptionContext exceptionContext = null;
+                if (context.UnhandledExceptionDelegate != null)
+                {
+                    exceptionContext = new UnhandledExceptionContext(context, resolveContext, ex);
+                    context.UnhandledExceptionDelegate(exceptionContext);
+                    ex = exceptionContext.Exception;
+                }
+
+                var error = new ExecutionError(exceptionContext?.ErrorMessage ?? $"Error trying to resolve {node.Name}.", ex);
                 error.AddLocation(node.Field, context.Document);
                 error.Path = node.Path;
                 context.Errors.Add(error);
@@ -290,24 +295,21 @@ namespace GraphQL.Execution
 
                 if (objectType == null)
                 {
-                    var error = new ExecutionError(
+                    throw new ExecutionError(
                         $"Abstract type {abstractType.Name} must resolve to an Object type at " +
                         $"runtime for field {node.Parent.GraphType.Name}.{node.Name} " +
                         $"with value '{result}', received 'null'.");
-                    throw error;
                 }
 
                 if (!abstractType.IsPossibleType(objectType))
                 {
-                    var error = new ExecutionError($"Runtime Object type \"{objectType}\" is not a possible type for \"{abstractType}\"");
-                    throw error;
+                    throw new ExecutionError($"Runtime Object type \"{objectType}\" is not a possible type for \"{abstractType}\".");
                 }
             }
 
             if (objectType?.IsTypeOf != null && !objectType.IsTypeOf(result))
             {
-                var error = new ExecutionError($"Expected value of type \"{objectType}\" for \"{objectType.Name}\" but got: {result}.");
-                throw error;
+                throw new ExecutionError($"\"{result}\" value of type \"{result.GetType()}\" is not allowed for \"{objectType.Name}\". Either change IsTypeOf method of \"{objectType.Name}\" to accept this value or return another value from your resolver.");
             }
         }
 

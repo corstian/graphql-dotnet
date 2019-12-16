@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using GraphQL.Language.AST;
 
 namespace GraphQL.Validation.Rules
@@ -16,7 +17,9 @@ namespace GraphQL.Validation.Rules
             return $"The directive \"{directiveName}\" can only be used once at this location.";
         }
 
-        public INodeVisitor Validate(ValidationContext context)
+        public static readonly UniqueDirectivesPerLocation Instance = new UniqueDirectivesPerLocation();
+
+        public Task<INodeVisitor> ValidateAsync(ValidationContext context)
         {
             return new EnterLeaveListener(_ =>
             {
@@ -44,7 +47,7 @@ namespace GraphQL.Validation.Rules
                 {
                     CheckDirectives(context, f.Directives);
                 });
-            });
+            }).ToTask();
         }
 
         private void CheckDirectives(ValidationContext context, Directives directives)
